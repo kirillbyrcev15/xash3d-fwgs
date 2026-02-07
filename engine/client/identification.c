@@ -638,7 +638,7 @@ void ID_GetMD5ForAddress( char *key, netadr_t adr, size_t size )
 {
 	MD5Context_t ctx_copy = id_md5_ctx;
 	byte buf[32];
-	size_t bufsize;
+	size_t bufsize = 0;
 	byte md5[16];
 
 	switch( NET_NetadrType( &adr ))
@@ -646,16 +646,13 @@ void ID_GetMD5ForAddress( char *key, netadr_t adr, size_t size )
 	// local server case
 	case NA_IP:
 		memcpy( buf, adr.ip, sizeof( adr.ip ));
-		memcpy( buf + sizeof( adr.ip ), &adr.port, sizeof( adr.port ));
-		bufsize = sizeof( adr.ip ) + sizeof( adr.port );
+		bufsize = sizeof( adr.ip );
 		break;
 	case NA_IP6:
 		NET_NetadrToIP6Bytes( buf, &adr );
-		memcpy( buf + 16, &adr.port, sizeof( adr.port ));
-		bufsize = 16 + sizeof( adr.port );
+		bufsize = 16;
 		break;
 	default:
-		bufsize = 0;
 		break;
 	}
 
