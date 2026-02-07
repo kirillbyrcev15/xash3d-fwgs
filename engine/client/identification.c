@@ -22,7 +22,7 @@ GNU General Public License for more details.
 #include <io.h>
 #endif
 
-static char id_md5[33];
+static MD5Context_t id_md5_ctx; // not finalized md5 context for salting
 
 /*
 ==========================================================
@@ -634,17 +634,40 @@ static void ID_Check( void )
 #endif
 }
 
-const char *ID_GetMD5( void )
+void ID_GetMD5ForAddress( char *key, netadr_t adr, size_t size )
 {
-	return id_md5;
+	MD5Context_t ctx_copy = id_md5_ctx;
+	byte buf[32];
+	size_t bufsize;
+	byte md5[16];
+
+	switch( NET_NetadrType( &adr ))
+	{
+	// local server case
+	case NA_IP:
+		memcpy( buf, adr.ip, sizeof( adr.ip ));
+		memcpy( buf + sizeof( adr.ip ), &adr.port, sizeof( adr.port ));
+		bufsize = sizeof( adr.ip ) + sizeof( adr.port );
+		break;
+	case NA_IP6:
+		NET_NetadrToIP6Bytes( buf, &adr );
+		memcpy( buf + 16, &adr.port, sizeof( adr.port ));
+		bufsize = 16 + sizeof( adr.port );
+		break;
+	default:
+		bufsize = 0;
+		break;
+	}
+
+	if( bufsize != 0 )
+		MD5Update( &ctx_copy, buf, bufsize );
+
+	MD5Final( md5, &ctx_copy );
+	Q_strnlwr( MD5_Print( md5 ), key, size );
 }
 
 void ID_Init( void )
 {
-	MD5Context_t hash = { 0 };
-	byte md5[16];
-	int i;
-
 	Cmd_AddRestrictedCommand( "bloomfilter", ID_BloomFilter_f, "print bloomfilter raw value of arguments set");
 	Cmd_AddRestrictedCommand( "verifyhex", ID_VerifyHEX_f, "check if id source seems to be fake" );
 #if XASH_LINUX
@@ -703,12 +726,8 @@ void ID_Init( void )
 	if( !id )
 		id = ID_GenerateRawId();
 
-	MD5Init( &hash );
-	MD5Update( &hash, (byte *)&id, sizeof( id ) );
-	MD5Final( (byte*)md5, &hash );
-
-	for( i = 0; i < 16; i++ )
-		Q_snprintf( &id_md5[i*2], sizeof( id_md5 ) - i * 2, "%02hhx", md5[i] );
+	MD5Init( &id_md5_ctx );
+	MD5Update( &id_md5_ctx, (byte *)&id, sizeof( id ));
 
 #if XASH_ANDROID && !XASH_DEDICATED
 	Android_SaveID( va("%016"PRIX64, id^SYSTEM_XOR_MASK ) );
